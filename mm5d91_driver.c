@@ -56,6 +56,10 @@ static int mm5d91_release(struct inode *inode, struct file *file)
     return 0;
 }
 
+/**
+ * @brief Is called from user space when getting data from sensor to user app.
+ *        
+ */
 static ssize_t mm5d91_read(struct file *file, char __user *user_buffer,
                       size_t count, loff_t *offset)
 {
@@ -64,6 +68,11 @@ static ssize_t mm5d91_read(struct file *file, char __user *user_buffer,
     return 0;
 }
 
+/**
+ * @brief Calculates CRC16 sum for message. Is used to add crc code to messages that will be send
+ *        but also to be cheked crc from receved messages from sensor.
+ *        
+ */
 static struct crc_data crc16(struct msg_data *msg)
 {
 	
@@ -80,24 +89,27 @@ static struct crc_data crc16(struct msg_data *msg)
 	}
 	crc.crc_hi = (unsigned char)(_crc  >> 8);
 	crc.crc_lo = (unsigned char)(_crc & 0x00FF);
-	printk("CRC: 0x%04x CRC HI: 0x%02x, CRC LO: 0x%02x", _crc, crc.crc_hi, crc.crc_lo);
+	//printk("CRC: 0x%04x CRC HI: 0x%02x, CRC LO: 0x%02x", _crc, crc.crc_hi, crc.crc_lo);
 	msg->buffer[msg->length] = crc.crc_lo;
 	msg->buffer[msg->length+1] = crc.crc_hi;
 	return (crc);
 }
 
+/**
+ * @brief Creates tx message. Received message is string and before sensding it to sensor, 
+ *        convertion to long is required byte by byte.
+ *        
+ */
 static int construct_tx_message(unsigned char *buf, struct msg_data *message, size_t len)
 {
 	int cnt = 0;
 	unsigned char localbuf[3];
 	long chr;
 	for (int i = 0; i<len-1; i=i+2) {
-		unsigned char one = (unsigned char)buf[i];
-		unsigned char sec = (unsigned char)buf[i+1];
-		localbuf[0] = one;
-		localbuf[1] = sec;
+		localbuf[0] = (unsigned char)buf[i];
+		localbuf[1] = (unsigned char)buf[i+1];
 		localbuf[2] = '\0';
-		if(!kstrtol(localbuf, 0x10, &chr)){
+		if(!kstrtol(localbuf, DEG_BASE, &chr)){
 			message->buffer[cnt] = chr;
 		}
 		cnt++;
@@ -107,6 +119,10 @@ static int construct_tx_message(unsigned char *buf, struct msg_data *message, si
 	return 1;
 }
 
+/**
+ * @brief Function to called from user space when sending commad to sensor
+ *        
+ */
 static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
                        size_t count, loff_t *offset)
 {
@@ -160,31 +176,30 @@ static struct serdev_device_driver mm5d91_uart_driver = {
 /* Device table reference */
 MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 
+
 /**
  * @brief Check message type.
  *        
  */
  static int check_message_type(struct msg_data *msg)
  {
-	int msg_type = (int)msg->chr;
+	int msg_type = (int)msg->buffer[MSG_TYPE_INDEX];
 	int ret = 0;
 	switch (msg_type){
 		case MSG_TYPE_DETECTION_ON:
 			printk("Detection ON");
 			ret = 1;
 			break;
-			
 		case MSG_TYPE_DETECTION_OFF:
 			printk("Detection OFF");
 			ret = 1;
 			break;
 		case MSG_TYPE_ACK:
-			printk("ACK message received");
+			printk("ACK message received value: %d", msg->buffer[MSG_ACK_VALUE]);
 			ret = 1;
 			break;
 		default:
 			printk("Unknowm message 0x%02x", msg_type);
-
 			ret = 1;
 	}
 	return ret;
@@ -219,9 +234,8 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 	if (msg->msg_found)
 	{
 		msg->buffer[msg->byte_index] = msg->chr;
-		if (msg->byte_index == MSG_TYPE){
-			if (!check_message_type(msg)) return -1;
-		} else if (msg->byte_index == MSG_LEN_INDEX) { 
+			
+		if (msg->byte_index == MSG_LEN_INDEX) { 
 			msg->length = (int)(msg->chr)+CRC_LEN;
 			if ((msg->length) >= BUFFER_LENGTH) {
 				printk("UART Buffer size exceeded and message skipped");
@@ -232,10 +246,7 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 		
 		if ((msg->length)+CRC_LEN == msg->byte_index)
 		{
-			if (userbuf){
-				int cnt = copy_to_user(userbuf,msg->buffer, msg->length );
-				if (!cnt) return -1;
-			}
+			if (!check_message_type(msg)) return -1;
 			msg->msg_found = 0;
 			msg->length = 0;
 			msg->msg_ready_to_send = 0;
@@ -260,6 +271,10 @@ static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *b
 	}
 }
 
+/**
+ * @brief Function which wraps the serdev sending function
+ *        
+ */
 static int mm5d91_uart_wrt(struct msg_data * msg) {
 	if (!msg->uart_device){
 		printk("issue in serdev_device = NULL");
@@ -271,8 +286,8 @@ static int mm5d91_uart_wrt(struct msg_data * msg) {
 	if (ret < 0 || ret < count)
 		return ret;
 	serdev_device_wait_until_sent(msg->uart_device, 0);
-	for (int i = 0; i<msg->length; i++)
-		printk("RET: %i BYTE: %c", ret, msg->buffer[i]);
+	//for (int i = 0; i<msg->length+CRC_LEN; i++)	// for debugging purposes only
+	//	printk("RET: %d BYTE: 0x%02x", ret, msg->buffer[i]);
 	return ret;
 }
 

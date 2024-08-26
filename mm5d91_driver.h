@@ -5,13 +5,17 @@
 #include <linux/module.h>
 #include <linux/init.h>
 
+#define DEG_BASE 0x10
 #define START_BYTE 0xd9
 #define MSG_TYPE_DETECTION_ON 0x06
 #define MSG_TYPE_DETECTION_OFF 0x07
 #define MSG_TYPE_ACK 0x02
 
 #define MSG_LEN_INDEX 0x02
-#define MSG_TYPE 0x01
+#define MSG_TYPE_INDEX 0x01
+
+#define MSG_ACK_VALUE 5
+
 
 #define BUFFER_LENGTH 128u
 #define CRC_LEN 2
