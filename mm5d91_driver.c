@@ -6,8 +6,13 @@
 #include <linux/platform_device.h>
 #include <linux/of_device.h>
 #include <linux/cdev.h>
+#include <linux/sched/signal.h>
 #include "mm5d91_driver.h"
+#include "mm5d91_ioctl.h"
 
+static int sig_pid = 0;
+static struct task_struct *sig_tsk = NULL;
+static int sig_tosend = SIGKILL;
 
 /******************** USER SIDE FUNCTIONS *******************/
 int base_minor = 0;
@@ -22,7 +27,6 @@ module_param(device_name, charp, 0);
 static struct class *class = NULL;
 static struct device *device = NULL;
 static struct cdev mm5d91dev;
-static char *userbuf = NULL;
 
 static struct msg_data rx_message = { 
 	.byte_index = 0,
@@ -44,29 +48,7 @@ static struct msg_data tx_message = {
 	.uart_device = NULL,
 };
 
-static int mm5d91_open(struct inode *inode, struct file *file)
-{
-	pr_info("%s\n", __func__);
-	return 0;
-}
-
-static int mm5d91_release(struct inode *inode, struct file *file)
-{
-	pr_info("%s\n", __func__);
-    return 0;
-}
-
-/**
- * @brief Is called from user space when getting data from sensor to user app.
- *        
- */
-static ssize_t mm5d91_read(struct file *file, char __user *user_buffer,
-                      size_t count, loff_t *offset)
-{
-	//pr_info("%s\n", __func__);
-	//copy_to_user to be added here
-    return 0;
-}
+/******************* HELPER FUNCTIONS *******************/
 
 /**
  * @brief Calculates CRC16 sum for message. Is used to add crc code to messages that will be send
@@ -100,7 +82,7 @@ static struct crc_data crc16(struct msg_data *msg)
  *        convertion to long is required byte by byte.
  *        
  */
-static int construct_tx_message(unsigned char *buf, struct msg_data *message, size_t len)
+static int construct_uart_tx_message(unsigned char *buf, struct msg_data *message, size_t len)
 {
 	int cnt = 0;
 	unsigned char localbuf[3];
@@ -119,6 +101,32 @@ static int construct_tx_message(unsigned char *buf, struct msg_data *message, si
 	return 1;
 }
 
+/************* USER SPACE FUNCTIONS **********************/
+
+static int mm5d91_open(struct inode *inode, struct file *file)
+{
+	pr_info("%s\n", __func__);
+	return 0;
+}
+
+static int mm5d91_release(struct inode *inode, struct file *file)
+{
+	pr_info("%s\n", __func__);
+    return 0;
+}
+
+/**
+ * @brief Is called from user space when getting data from sensor to user app.
+ *        
+ */
+static ssize_t mm5d91_read(struct file *file, char __user *user_buffer,
+                      size_t count, loff_t *offset)
+{
+	//pr_info("%s\n", __func__);
+	//copy_to_user to be added here
+    return 0;
+}
+
 /**
  * @brief Function to called from user space when sending commad to sensor
  *        
@@ -131,7 +139,7 @@ static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
 	
 	int nbr = copy_from_user(buf, user_buffer, count);
 	//message validation to be done here
-	construct_tx_message(buf, &tx_message, count);
+	construct_uart_tx_message(buf, &tx_message, count);
 	if (nbr){
 		printk("ISSUE in copying from user");
 		return -EFAULT;
@@ -143,11 +151,57 @@ static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
     return (ssize_t)count;
 }
 
+/**
+ * @brief ioctl function. 
+ * Gets pid from user space process and saves it to global variable.
+ */
+static ssize_t mm5d91_ioctl(struct file *file,  unsigned int cmd, unsigned long arg) {
+	int ok = 0;
+	int nok = 0;
+	long size = _IOC_SIZE(cmd);
+
+	if (_IOC_TYPE(cmd) != IOCTL_NUMBER) return -ENOTTY;
+	if (_IOC_NR(cmd) > IOCTL_MAX_CMDS) return -ENOTTY;
+	
+	ok = access_ok((void __user *)arg, size);
+	if (!ok)
+		return -EFAULT;
+
+	switch(cmd)
+	{
+		case IOCTL_SET_PID:
+			get_user(sig_pid, (unsigned int *)arg);
+			sig_tsk = pid_task(find_vpid(sig_pid), PIDTYPE_PID);
+			break;
+		case IOCTL_SET_SIGNAL:
+			get_user(sig_tosend, (unsigned int *)arg);
+			break;
+		case IOCTL_SEND_SIGNAL:	// this is in here for testing purposes. Sig send will be moved to conastruct msg function
+								// to trigger data move to user space.
+			if (!sig_tsk) {
+				// use current pid since new pid was not set.
+            	sig_tsk = current;
+            	sig_pid = (int)current->pid;
+            }
+			nok = send_sig(sig_tosend, sig_tsk, 0);
+			if (nok) {
+				pr_info("MM5D91: error sending signal %d", nok);
+				return nok;
+			}
+			break;
+		default:
+			pr_info("MM5D91: Unknown Command:%u\n", cmd);
+			return -ENOTTY;
+	}
+	return 0;
+}
+
 struct file_operations mm5d91_fops = {
 	.read = mm5d91_read,
 	.write = mm5d91_write,
 	.open = mm5d91_open,
-	.release = mm5d91_release
+	.release = mm5d91_release,
+	.unlocked_ioctl = mm5d91_ioctl
 };
 /******************** SENSOR SIDE FUNCTIONS *****************/
 
@@ -227,7 +281,7 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
  {
 	if (msg->chr == START_BYTE)
 	{
-		msg->msg_found = 1;
+		msg->msg_found = true;
 		initialize_msg(msg);
 	}
 	
@@ -236,10 +290,11 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 		msg->buffer[msg->byte_index] = msg->chr;
 			
 		if (msg->byte_index == MSG_LEN_INDEX) { 
-			msg->length = (int)(msg->chr)+CRC_LEN;
+			msg->length = (int)(msg->byte_index)+CRC_LEN;
 			if ((msg->length) >= BUFFER_LENGTH) {
-				printk("UART Buffer size exceeded and message skipped");
-				msg->length=0;
+				pr_info("MM5D91: UART Buffer size exceeded and message skipped");
+				initialize_msg(msg);
+				msg->msg_found = false;
 				return 0;
 			}
 		}
@@ -247,9 +302,13 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 		if ((msg->length)+CRC_LEN == msg->byte_index)
 		{
 			if (!check_message_type(msg)) return -1;
-			msg->msg_found = 0;
-			msg->length = 0;
-			msg->msg_ready_to_send = 0;
+			msg->msg_ready_to_send = true;
+		}
+		if (msg->msg_ready_to_send){
+			// COPY MSG to user buffer and SEND SIG to USER SPACE
+			initialize_msg(msg);
+			msg->msg_found = false;
+			return 1;
 		}
 
 		(msg->byte_index)++;
@@ -266,7 +325,7 @@ static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *b
 		return 1;
 	} else {
 		// add correct error and error code here
-		printk("Error happened.");
+		pr_info("Error happened.");
 		return -1;
 	}
 }

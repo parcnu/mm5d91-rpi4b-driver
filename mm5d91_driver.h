@@ -48,7 +48,7 @@ static int construct_message(struct msg_data *msg);
 static int check_message_type(struct msg_data *msg);
 static void initialize_msg(struct msg_data *msg);
 
-static int construct_tx_message(unsigned char *buf, struct msg_data *message, size_t len);
+static int construct_uart_tx_message(unsigned char *buf, struct msg_data *message, size_t len);
 
 static int mm5d91_open(struct inode *inode, struct file *file);
 static int mm5d91_release(struct inode *inode, struct file *file);
