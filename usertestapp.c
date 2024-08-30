@@ -9,6 +9,7 @@
 void signal_handler(int sig)
 {
 	printf("Signal Received\n");
+	// add read from /dev/mm5d91 here to copy received message to user app.
 }
 
 int main(int argc, char *argv[])
