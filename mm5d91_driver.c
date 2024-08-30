@@ -28,7 +28,7 @@ static struct class *class = NULL;
 static struct device *device = NULL;
 static struct cdev mm5d91dev;
 
-static struct msg_data rx_message = { 
+static struct msg_data_t rx_message = { 
 	.byte_index = 0,
 	.chr = 0,
 	.length = 0,
@@ -38,7 +38,7 @@ static struct msg_data rx_message = {
 	.uart_device = NULL,
 };
 
-static struct msg_data tx_message = { 
+static struct msg_data_t tx_message = { 
 	.byte_index = 0,
 	.chr = 0,
 	.length = 0,
@@ -55,10 +55,10 @@ static struct msg_data tx_message = {
  *        but also to be cheked crc from receved messages from sensor.
  *        
  */
-static struct crc_data crc16(struct msg_data *msg)
+static struct crc_data_t crc16(struct msg_data_t *msg)
 {
 	
-	struct crc_data crc;
+	struct crc_data_t crc;
 	crc.crc_lo = 0xff;
 	crc.crc_hi = 0xff;
 	uint16_t _crc = 0xFFFF;
@@ -82,7 +82,7 @@ static struct crc_data crc16(struct msg_data *msg)
  *        convertion to long is required byte by byte.
  *        
  */
-static int construct_uart_tx_message(unsigned char *buf, struct msg_data *message, size_t len)
+static int construct_uart_tx_message(unsigned char *buf, struct msg_data_t *message, size_t len)
 {
 	int cnt = 0;
 	unsigned char localbuf[3];
@@ -156,25 +156,21 @@ static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
  * Gets pid from user space process and saves it to global variable.
  */
 static ssize_t mm5d91_ioctl(struct file *file,  unsigned int cmd, unsigned long arg) {
-	int ok = 0;
 	int nok = 0;
-	long size = _IOC_SIZE(cmd);
-
+	struct pid_sig_t p_s; 
 	if (_IOC_TYPE(cmd) != IOCTL_NUMBER) return -ENOTTY;
 	if (_IOC_NR(cmd) > IOCTL_MAX_CMDS) return -ENOTTY;
-	
-	ok = access_ok((void __user *)arg, size);
-	if (!ok)
-		return -EFAULT;
 
 	switch(cmd)
 	{
-		case IOCTL_SET_PID:
-			get_user(sig_pid, (unsigned int *)arg);
+		case IOCTL_SET_PID_SIG:
+			if (copy_from_user(&p_s, (struct pid_sig_t *)arg, sizeof(struct pid_sig_t)))
+            {
+                return -EACCES;
+            }
+			sig_pid = (int)p_s.pid;
+			sig_tosend = (int)p_s.sig;
 			sig_tsk = pid_task(find_vpid(sig_pid), PIDTYPE_PID);
-			break;
-		case IOCTL_SET_SIGNAL:
-			get_user(sig_tosend, (unsigned int *)arg);
 			break;
 		case IOCTL_SEND_SIGNAL:	// this is in here for testing purposes. Sig send will be moved to conastruct msg function
 								// to trigger data move to user space.
@@ -235,7 +231,7 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
  * @brief Check message type.
  *        
  */
- static int check_message_type(struct msg_data *msg)
+ static int check_message_type(struct msg_data_t *msg)
  {
 	int msg_type = (int)msg->buffer[MSG_TYPE_INDEX];
 	int ret = 0;
@@ -264,7 +260,7 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
  * @brief Initialize message struct
  *        
  */
- static void initialize_msg(struct msg_data *msg)
+ static void initialize_msg(struct msg_data_t *msg)
  {
 	for (int i=0; i<BUFFER_LENGTH; i++) msg->buffer[i] = 0;
 	msg->byte_index = 0;
@@ -277,7 +273,7 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
  * @brief Construct message.
  *        Get message length from the UART message and create buffer based the len.
  */
- static int construct_message(struct msg_data *msg)
+ static int construct_message(struct msg_data_t *msg)
  {
 	if (msg->chr == START_BYTE)
 	{
@@ -334,7 +330,7 @@ static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *b
  * @brief Function which wraps the serdev sending function
  *        
  */
-static int mm5d91_uart_wrt(struct msg_data * msg) {
+static int mm5d91_uart_wrt(struct msg_data_t * msg) {
 	if (!msg->uart_device){
 		printk("issue in serdev_device = NULL");
 		//Add correct error code here to be returned

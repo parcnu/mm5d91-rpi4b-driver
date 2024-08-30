@@ -20,7 +20,7 @@
 #define BUFFER_LENGTH 128u
 #define CRC_LEN 2
 
-struct msg_data{
+struct msg_data_t{
     unsigned char chr;
     int msg_found; 
     int byte_index;
@@ -32,7 +32,7 @@ struct msg_data{
     struct cdev user_device;
 };
 
-struct crc_data{
+struct crc_data_t{
     unsigned char crc_lo;
     unsigned char crc_hi;
 };
@@ -41,14 +41,14 @@ int buff[128];
 static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *buffer, size_t size);
 static int mm5d91_uart_probe(struct serdev_device *mm5d91);
 static void mm5d91_uart_remove(struct serdev_device *mm5d91);
-static int mm5d91_uart_wrt(struct msg_data *msg);
+static int mm5d91_uart_wrt(struct msg_data_t *msg);
 static int __init mm5d91_uart_init(void);
 static void __exit mm5d91_uart_exit(void);
-static int construct_message(struct msg_data *msg);
-static int check_message_type(struct msg_data *msg);
-static void initialize_msg(struct msg_data *msg);
+static int construct_message(struct msg_data_t *msg);
+static int check_message_type(struct msg_data_t *msg);
+static void initialize_msg(struct msg_data_t *msg);
 
-static int construct_uart_tx_message(unsigned char *buf, struct msg_data *message, size_t len);
+static int construct_uart_tx_message(unsigned char *buf, struct msg_data_t *message, size_t len);
 
 static int mm5d91_open(struct inode *inode, struct file *file);
 static int mm5d91_release(struct inode *inode, struct file *file);
