@@ -28,6 +28,9 @@ static struct class *class = NULL;
 static struct device *device = NULL;
 static struct cdev mm5d91dev;
 
+static char kernel_buffer[BUFFER_LENGTH];
+static int kernel_buffer_len = 0;
+
 static struct msg_data_t rx_message = { 
 	.byte_index = 0,
 	.chr = 0,
@@ -71,7 +74,6 @@ static struct crc_data_t crc16(struct msg_data_t *msg)
 	}
 	crc.crc_hi = (unsigned char)(_crc  >> 8);
 	crc.crc_lo = (unsigned char)(_crc & 0x00FF);
-	//printk("CRC: 0x%04x CRC HI: 0x%02x, CRC LO: 0x%02x", _crc, crc.crc_hi, crc.crc_lo);
 	msg->buffer[msg->length] = crc.crc_lo;
 	msg->buffer[msg->length+1] = crc.crc_hi;
 	return (crc);
@@ -105,13 +107,16 @@ static int construct_uart_tx_message(unsigned char *buf, struct msg_data_t *mess
 
 static int mm5d91_open(struct inode *inode, struct file *file)
 {
-	pr_info("%s\n", __func__);
+	//pr_info("%s\n", __func__);
 	return 0;
 }
 
 static int mm5d91_release(struct inode *inode, struct file *file)
 {
-	pr_info("%s\n", __func__);
+	//(pr_info("%s\n", __func__);
+	sig_pid = 0;
+	sig_tsk = NULL;
+	sig_tosend = SIGKILL;;
     return 0;
 }
 
@@ -122,9 +127,14 @@ static int mm5d91_release(struct inode *inode, struct file *file)
 static ssize_t mm5d91_read(struct file *file, char __user *user_buffer,
                       size_t count, loff_t *offset)
 {
-	//pr_info("%s\n", __func__);
-	//copy_to_user to be added here
-    return 0;
+	int ret = -EFAULT;
+	int ok = access_ok(user_buffer, count);
+	if (ok){
+		ret = copy_to_user(user_buffer, kernel_buffer,count);
+	} else {
+		return -EACCES;
+	}
+    return ret;
 }
 
 /**
@@ -134,14 +144,12 @@ static ssize_t mm5d91_read(struct file *file, char __user *user_buffer,
 static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
                        size_t count, loff_t *offset)
 {
-	pr_info("%s\n", __func__);
+	//pr_info("%s\n", __func__);
 	unsigned char buf[BUFFER_LENGTH];
-	
 	int nbr = copy_from_user(buf, user_buffer, count);
-	//message validation to be done here
 	construct_uart_tx_message(buf, &tx_message, count);
 	if (nbr){
-		printk("ISSUE in copying from user");
+		pr_info("MM5D91: ISSUE in copying from user");
 		return -EFAULT;
 	}
 	*offset += count;
@@ -156,34 +164,31 @@ static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
  * Gets pid from user space process and saves it to global variable.
  */
 static ssize_t mm5d91_ioctl(struct file *file,  unsigned int cmd, unsigned long arg) {
-	int nok = 0;
+	int ok = 0;
 	struct pid_sig_t p_s; 
 	if (_IOC_TYPE(cmd) != IOCTL_NUMBER) return -ENOTTY;
 	if (_IOC_NR(cmd) > IOCTL_MAX_CMDS) return -ENOTTY;
-
+	
 	switch(cmd)
 	{
 		case IOCTL_SET_PID_SIG:
-			if (copy_from_user(&p_s, (struct pid_sig_t *)arg, sizeof(struct pid_sig_t)))
-            {
-                return -EACCES;
-            }
-			sig_pid = (int)p_s.pid;
-			sig_tosend = (int)p_s.sig;
-			sig_tsk = pid_task(find_vpid(sig_pid), PIDTYPE_PID);
-			break;
-		case IOCTL_SEND_SIGNAL:	// this is in here for testing purposes. Sig send will be moved to conastruct msg function
-								// to trigger data move to user space.
-			if (!sig_tsk) {
-				// use current pid since new pid was not set.
-            	sig_tsk = current;
-            	sig_pid = (int)current->pid;
-            }
-			nok = send_sig(sig_tosend, sig_tsk, 0);
-			if (nok) {
-				pr_info("MM5D91: error sending signal %d", nok);
-				return nok;
+			ok = access_ok((void __user *)arg, sizeof(struct pid_sig_t));
+			if (ok) {
+				if (copy_from_user(&p_s, (struct pid_sig_t*)arg, sizeof(struct pid_sig_t)))
+            	{
+                	return -EACCES;
+            	}
+				sig_pid = (int)p_s.pid;
+				sig_tosend = (int)p_s.sig;
+				sig_tsk = pid_task(find_vpid(sig_pid), PIDTYPE_PID);
+			} else {
+				return ok;
 			}
+			break;
+		case IOCTL_SEND_SIGNAL:	// to be used for future purposes
+			break;
+		case IOCTL_GET_MSG_LEN:
+			return (kernel_buffer_len);
 			break;
 		default:
 			pr_info("MM5D91: Unknown Command:%u\n", cmd);
@@ -237,15 +242,15 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 	int ret = 0;
 	switch (msg_type){
 		case MSG_TYPE_DETECTION_ON:
-			printk("Detection ON");
+			//printk("Detection ON");
 			ret = 1;
 			break;
 		case MSG_TYPE_DETECTION_OFF:
-			printk("Detection OFF");
+			//printk("Detection OFF");
 			ret = 1;
 			break;
 		case MSG_TYPE_ACK:
-			printk("ACK message received value: %d", msg->buffer[MSG_ACK_VALUE]);
+			//printk("ACK message received value: %d", msg->buffer[MSG_ACK_VALUE]);
 			ret = 1;
 			break;
 		default:
@@ -275,6 +280,7 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
  */
  static int construct_message(struct msg_data_t *msg)
  {
+	int nok = 0;
 	if (msg->chr == START_BYTE)
 	{
 		msg->msg_found = true;
@@ -284,9 +290,8 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 	if (msg->msg_found)
 	{
 		msg->buffer[msg->byte_index] = msg->chr;
-			
 		if (msg->byte_index == MSG_LEN_INDEX) { 
-			msg->length = (int)(msg->byte_index)+CRC_LEN;
+			msg->length = (int)(msg->buffer[msg->byte_index])+CRC_LEN + MSG_HEADER_LEN;
 			if ((msg->length) >= BUFFER_LENGTH) {
 				pr_info("MM5D91: UART Buffer size exceeded and message skipped");
 				initialize_msg(msg);
@@ -295,18 +300,33 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 			}
 		}
 		
-		if ((msg->length)+CRC_LEN == msg->byte_index)
+		if ((msg->length) == msg->byte_index+1 && msg->byte_index > 0)
 		{
-			if (!check_message_type(msg)) return -1;
+			if (!check_message_type(msg)){
+				initialize_msg(msg);
+				msg->msg_found = false;
+			} 
 			msg->msg_ready_to_send = true;
 		}
+
 		if (msg->msg_ready_to_send){
-			// COPY MSG to user buffer and SEND SIG to USER SPACE
+			kernel_buffer_len = msg->length;
+			for (int i = 0; i <= kernel_buffer_len; i++){
+				kernel_buffer[i] = msg->buffer[i];
+			}
+			
 			initialize_msg(msg);
 			msg->msg_found = false;
+			msg->msg_ready_to_send = false;
+			if (sig_tsk){
+				nok = send_sig(sig_tosend, sig_tsk, 0);
+				if (nok) {
+					pr_info("MM5D91: error sending signal %d", nok);
+					return nok;
+				}
+			}
 			return 1;
 		}
-
 		(msg->byte_index)++;
 	}	
 	return 1;
@@ -316,13 +336,13 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
  * @brief Callback is called whenever a character is received from the radar
  */
 static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *buffer, size_t size) {
-	rx_message.chr = (char)buffer[0];
+	rx_message.chr = (unsigned char)buffer[0];
 	if (construct_message(&rx_message)){
 		return 1;
 	} else {
 		// add correct error and error code here
-		pr_info("Error happened.");
-		return -1;
+		pr_info("MM5D91: Error happened in construct msg.");
+		return -EFAULT;
 	}
 }
 
@@ -333,16 +353,13 @@ static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *b
 static int mm5d91_uart_wrt(struct msg_data_t * msg) {
 	if (!msg->uart_device){
 		printk("issue in serdev_device = NULL");
-		//Add correct error code here to be returned
-		return -1;
+		return -EFAULT;
 	}
 	
 	int ret = serdev_device_write(msg->uart_device, msg->buffer, (size_t)msg->length+CRC_LEN, 0);
 	if (ret < 0 || ret < count)
 		return ret;
 	serdev_device_wait_until_sent(msg->uart_device, 0);
-	//for (int i = 0; i<msg->length+CRC_LEN; i++)	// for debugging purposes only
-	//	printk("RET: %d BYTE: 0x%02x", ret, msg->buffer[i]);
 	return ret;
 }
 

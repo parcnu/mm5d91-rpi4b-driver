@@ -4,21 +4,20 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include "mm5d91_ioctl.h"
 
 #define DEG_BASE 0x10
 #define START_BYTE 0xd9
 #define MSG_TYPE_DETECTION_ON 0x06
 #define MSG_TYPE_DETECTION_OFF 0x07
 #define MSG_TYPE_ACK 0x02
-
 #define MSG_LEN_INDEX 0x02
 #define MSG_TYPE_INDEX 0x01
 
 #define MSG_ACK_VALUE 5
 
-
-#define BUFFER_LENGTH 128u
 #define CRC_LEN 2
+#define MSG_HEADER_LEN 4
 
 struct msg_data_t{
     unsigned char chr;
@@ -56,5 +55,6 @@ static ssize_t mm5d91_read(struct file *file, char __user *user_buffer,
                            size_t count, loff_t *offset);
 static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
                             size_t count, loff_t *offset);
+static ssize_t mm5d91_ioctl(struct file *file,  unsigned int cmd, unsigned long arg);
 
 #endif //MM5D91DRIVER_H
