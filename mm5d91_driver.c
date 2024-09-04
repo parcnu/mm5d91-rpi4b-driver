@@ -10,6 +10,7 @@
 #include "mm5d91_driver.h"
 #include "mm5d91_ioctl.h"
 
+static unsigned int mm5d91_reserved = 0;
 static int sig_pid = 0;
 static struct task_struct *sig_tsk = NULL;
 static int sig_tosend = SIGKILL;
@@ -108,12 +109,18 @@ static int construct_uart_tx_message(unsigned char *buf, struct msg_data_t *mess
 static int mm5d91_open(struct inode *inode, struct file *file)
 {
 	//pr_info("%s\n", __func__);
+	if (!mm5d91_reserved){
+		mm5d91_reserved++;
+	} else {
+		return -EBUSY;
+	}
 	return 0;
 }
 
 static int mm5d91_release(struct inode *inode, struct file *file)
 {
 	//(pr_info("%s\n", __func__);
+	mm5d91_reserved = 0;
 	sig_pid = 0;
 	sig_tsk = NULL;
 	sig_tosend = SIGKILL;;
