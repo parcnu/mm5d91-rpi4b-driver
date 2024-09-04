@@ -24,7 +24,7 @@ module_param(base_minor, int, 0);
 module_param(count, int, 0);
 module_param(device_name, charp, 0);
 
-static struct class *class = NULL;
+static struct class *mm5d91class = NULL;
 static struct device *device = NULL;
 static struct cdev mm5d91dev;
 
@@ -231,6 +231,14 @@ static struct serdev_device_driver mm5d91_uart_driver = {
 /* Device table reference */
 MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 
+/**
+ * @brief Set RW permissions for created device
+ */
+static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
+{
+    add_uevent_var(env, "DEVMODE=%#o", 0666);
+    return 0;
+}
 
 /**
  * @brief Check message type.
@@ -241,21 +249,33 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 	int msg_type = (int)msg->buffer[MSG_TYPE_INDEX];
 	int ret = 0;
 	switch (msg_type){
-		case MSG_TYPE_DETECTION_ON:
-			//printk("Detection ON");
-			ret = 1;
-			break;
-		case MSG_TYPE_DETECTION_OFF:
-			//printk("Detection OFF");
-			ret = 1;
-			break;
+		case MSG_TYPE_VERSION:
 		case MSG_TYPE_ACK:
-			//printk("ACK message received value: %d", msg->buffer[MSG_ACK_VALUE]);
-			ret = 1;
+		case MSG_TYPE_MAX_RNG:
+		case MSG_TYPE_SENSITIVITY:
+		case MSG_TYPE_DETECTION_OUTPUT_STATUS:
+		case MSG_TYPE_DETECTION_ON:
+		case MSG_TYPE_DETECTION_OFF:
+		case MSG_TYPE_DETECTION_STATUS:
+		case MSG_TYPE_DETECTION_ENABLE:
+		case MSG_TYPE_CIP_TEMP:
+		case MSG_TYPE_CALIB_MODE:
+		case MSG_TYPE_CALIB_MESSAGE:
+		case MSG_TYPE_CALIB_OUTPUT_RATE:
+		case MSG_TYPE_MIN_RNG:
+		case MSG_TYPE_MACRO_THREHOLD:
+		case MSG_TYPE_MICRO_THRESHOLD:
+		case MSG_TYPE_MACRO_VALID:
+		case MSG_TYPE_MICRO_VALID:
+		case MSG_TYPE_DETECTION_MODE:
+		case MSG_TYPE_MACRO_DETECTION_TRIGGER_RANGE:
+		case MSG_TYPE_MACRO_DETECTION_TRIGGER_DELAY:
+		case MSG_TYPE_CHIRP_PER_FRAME:
+			ret = MSG_OK;
 			break;
 		default:
-			printk("Unknowm message 0x%02x", msg_type);
-			ret = 1;
+			pr_info("MM5D91: Unknowm message 0x%02x", msg_type);
+			ret = MSG_NOK;
 	}
 	return ret;
  }
@@ -390,6 +410,7 @@ static void mm5d91_uart_remove(struct serdev_device *mm5d91) {
 	serdev_device_close(mm5d91);
 }
 
+
 /**
  * @brief This function is called, when the module is loaded into the kernel
  * 		  Creates class
@@ -399,12 +420,18 @@ static void mm5d91_uart_remove(struct serdev_device *mm5d91) {
  * 		  registers serdev driver for mm5d91 communication
  */
 static int __init mm5d91_uart_init(void) {
+	
 	int ret = alloc_chrdev_region(&devicenumber, base_minor, count, device_name);
 	if (!ret) {
 		printk("Device number registered\n");
 		printk("Major number received:%d\n", MAJOR(devicenumber));
-		class = class_create("mm5d91");
-		device = device_create(class, NULL, devicenumber, NULL, device_name);
+		mm5d91class = class_create("mm5d91");
+		mm5d91class->dev_uevent = mm5d91_uevent;
+		if (IS_ERR(mm5d91class))
+                return PTR_ERR(mm5d91class);
+		device = device_create(mm5d91class, NULL, devicenumber, NULL, device_name);
+		if (IS_ERR(device))
+                return PTR_ERR(device);
 		cdev_init(&mm5d91dev, &mm5d91_fops);
 		mm5d91dev.owner = THIS_MODULE;
 		cdev_add(&mm5d91dev, devicenumber, count);
@@ -429,8 +456,8 @@ static int __init mm5d91_uart_init(void) {
 */
 static void __exit mm5d91_uart_exit(void) {
 	printk("mm5d91 - Unloading driver");
-	device_destroy(class, devicenumber);
-    class_destroy(class);
+	device_destroy(mm5d91class, devicenumber);
+    class_destroy(mm5d91class);
 	cdev_del(&mm5d91dev);
 	unregister_chrdev_region(devicenumber, count);
 	serdev_device_driver_unregister(&mm5d91_uart_driver);

@@ -10,11 +10,13 @@ unsigned int userbuffer[BUFFER_LENGTH];
 int fd;
 unsigned char user_buf[BUFFER_LENGTH];
 int len;
+static int calc = 0;
 
 void signal_handler(int sig)
 {
 	int32_t cnt;
-	printf("Signal Received\n");
+	calc++;
+	printf("Signal Received %i\n", calc);
 	cnt = ioctl(fd, IOCTL_GET_MSG_LEN, (int32_t *) &cnt);
 	printf("CNT %i\n", cnt);
 	// add read from /dev/mm5d91 here to copy received message to user app.
