@@ -127,6 +127,7 @@ static int mm5d91_release(struct inode *inode, struct file *file)
 static ssize_t mm5d91_read(struct file *file, char __user *user_buffer,
                       size_t count, loff_t *offset)
 {
+	//(pr_info("%s\n", __func__);	
 	int ret = -EFAULT;
 	int ok = access_ok(user_buffer, count);
 	if (ok){
@@ -274,8 +275,9 @@ static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
 			ret = MSG_OK;
 			break;
 		default:
-			pr_info("MM5D91: Unknowm message 0x%02x", msg_type);
+			//pr_info("MM5D91: Unknown message 0x%02x", msg_type);
 			ret = MSG_NOK;
+			break;
 	}
 	return ret;
  }
@@ -295,8 +297,31 @@ static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
  }
 
 /**
+ * @brief check_crc calulates crc value from the message and compares that with received values.
+ * 
+ */
+static int check_crc(struct msg_data_t * msg){
+	struct msg_data_t cp_msg = {
+		.length = 0,
+	};
+	for (int i = 0; i < msg->length-2; i++){
+		cp_msg.buffer[i] = msg->buffer[i];
+		cp_msg.length = i;
+	}
+	cp_msg.length++;
+	crc16(&cp_msg);
+	cp_msg.length=cp_msg.length+CRC_LEN;
+	if (msg->buffer[msg->length - 2] == cp_msg.buffer[cp_msg.length-2] &&
+		msg->buffer[msg->length-1] == cp_msg.buffer[cp_msg.length-1]){
+			return 1;
+		}
+	return 0;
+}
+
+/**
  * @brief Construct message.
- *        Get message length from the UART message and create buffer based the len.
+ *        Get message length from the UART message and create buffer based on the len.
+ * @return true if message construction success, false if issues happened. 
  */
  static int construct_message(struct msg_data_t *msg)
  {
@@ -313,7 +338,7 @@ static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
 		if (msg->byte_index == MSG_LEN_INDEX) { 
 			msg->length = (int)(msg->buffer[msg->byte_index])+CRC_LEN + MSG_HEADER_LEN;
 			if ((msg->length) >= BUFFER_LENGTH) {
-				pr_info("MM5D91: UART Buffer size exceeded and message skipped");
+				//pr_info("MM5D91: UART Buffer size exceeded and message skipped");
 				initialize_msg(msg);
 				msg->msg_found = false;
 				return 0;
@@ -330,18 +355,24 @@ static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
 		}
 
 		if (msg->msg_ready_to_send){
+			if (!check_crc(msg)) {
+				pr_info("MM5D91: CRC mismatch");
+				initialize_msg(msg);
+				msg->msg_found = false;
+				msg->msg_ready_to_send = false;
+				return 0;
+			}
 			kernel_buffer_len = msg->length;
 			for (int i = 0; i <= kernel_buffer_len; i++){
 				kernel_buffer[i] = msg->buffer[i];
 			}
-			
 			initialize_msg(msg);
 			msg->msg_found = false;
 			msg->msg_ready_to_send = false;
 			if (sig_tsk){
 				nok = send_sig(sig_tosend, sig_tsk, 0);
 				if (nok) {
-					pr_info("MM5D91: error sending signal %d", nok);
+					pr_info("MM5D91: error sending signal to USER PID %d", sig_tosend);
 					return nok;
 				}
 			}
@@ -358,10 +389,10 @@ static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
 static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *buffer, size_t size) {
 	rx_message.chr = (unsigned char)buffer[0];
 	if (construct_message(&rx_message)){
-		return 1;
+		return size;
 	} else {
 		// add correct error and error code here
-		pr_info("MM5D91: Error happened in construct msg.");
+		// pr_info("MM5D91: Error happened in construct msg.");
 		return -EFAULT;
 	}
 }
@@ -372,7 +403,7 @@ static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *b
  */
 static int mm5d91_uart_wrt(struct msg_data_t * msg) {
 	if (!msg->uart_device){
-		printk("issue in serdev_device = NULL");
+		pr_info("MM5D91: serdev_device = NULL");
 		return -EFAULT;
 	}
 	
@@ -393,7 +424,7 @@ static int mm5d91_uart_probe(struct serdev_device *mm5d91) {
 	status = serdev_device_open(mm5d91);
 
 	if(status) {
-		printk("mm5d91 - Error opening serial port!\n");
+		pr_info("MM5D91: Error opening serial port!\n");
 		return -status;
 	}
 	serdev_device_set_baudrate(mm5d91, 115200);
@@ -423,8 +454,8 @@ static int __init mm5d91_uart_init(void) {
 	
 	int ret = alloc_chrdev_region(&devicenumber, base_minor, count, device_name);
 	if (!ret) {
-		printk("Device number registered\n");
-		printk("Major number received:%d\n", MAJOR(devicenumber));
+		pr_info("MM5D91: Device number registered\n");
+		//printk("Major number received:%d\n", MAJOR(devicenumber));
 		mm5d91class = class_create("mm5d91");
 		mm5d91class->dev_uevent = mm5d91_uevent;
 		if (IS_ERR(mm5d91class))
@@ -437,16 +468,16 @@ static int __init mm5d91_uart_init(void) {
 		cdev_add(&mm5d91dev, devicenumber, count);
 		
 	} else {
-		printk("Device number registration Failed\n");
+		pr_info("MM5D91: Device number registration Failed\n");
 		return -ret;
 	}
 
 	ret = serdev_device_driver_register(&mm5d91_uart_driver);
 	if(ret) {
-		printk("mm5d91 - Error! Could not load driver\n");
+		pr_info("MM5D91: Error! Could not load driver\n");
 		return -ret;
 	}
-	printk("mm5d91 - Driver loaded %d\n", ret);
+	//printk("mm5d91 - Driver loaded %d\n", ret);
 		
 	return 0;
 }
@@ -455,7 +486,7 @@ static int __init mm5d91_uart_init(void) {
 * Function to be called when driver is removed from kernel.
 */
 static void __exit mm5d91_uart_exit(void) {
-	printk("mm5d91 - Unloading driver");
+	pr_info("MM5D91: Driver removed");
 	device_destroy(mm5d91class, devicenumber);
     class_destroy(mm5d91class);
 	cdev_del(&mm5d91dev);
