@@ -19,7 +19,6 @@ void signal_handler(int sig)
 	printf("Signal Received %i\n", calc);
 	cnt = ioctl(fd, IOCTL_GET_MSG_LEN, (int32_t *) &cnt);
 	printf("CNT %i\n", cnt);
-	// add read from /dev/mm5d91 here to copy received message to user app.
 	read(fd,user_buf,cnt);
 	user_buf[10] = '\0';
 	for (int i = 0 ; i<cnt; i++)

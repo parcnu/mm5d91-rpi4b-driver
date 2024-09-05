@@ -10,7 +10,6 @@
 #define START_BYTE 0xd9
 
 // Identified message types
-#define MSG_TYPE_VERSION 0x00
 #define MSG_TYPE_ACK 0x02
 #define MSG_TYPE_MAX_RNG 0x03
 #define MSG_TYPE_SENSITIVITY 0x04
@@ -82,5 +81,6 @@ static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
                             size_t count, loff_t *offset);
 static ssize_t mm5d91_ioctl(struct file *file,  unsigned int cmd, unsigned long arg);
 static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env);
+static int check_message_len(struct msg_data_t *msg);
 
 #endif //__MM5D91DRIVER_H

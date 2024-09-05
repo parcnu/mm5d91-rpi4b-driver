@@ -125,7 +125,6 @@ static int mm5d91_release(struct inode *inode, struct file *file)
 	mm5d91_reserved = 0;
 	sig_pid = 0;
 	sig_tsk = NULL;
-	//sig_tosend = SIGKILL;;
     return 0;
 }
 
@@ -235,6 +234,14 @@ static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
 }
 
 /**
+ * @brief Check message len
+ *        
+ */
+static int check_message_len(struct msg_data_t *msg){
+	return msg->length;
+}
+
+/**
  * @brief Check message type.
  *        
  */
@@ -243,7 +250,7 @@ static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
 	int msg_type = (int)msg->buffer[MSG_TYPE_INDEX];
 	int ret = 0;
 	switch (msg_type){
-		case MSG_TYPE_VERSION:
+		//case MSG_TYPE_VERSION:
 		case MSG_TYPE_ACK:
 		case MSG_TYPE_MAX_RNG:
 		case MSG_TYPE_SENSITIVITY:
@@ -282,11 +289,12 @@ static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
  */
  static void initialize_msg(struct msg_data_t *msg)
  {
-	for (int i=0; i<BUFFER_LENGTH; i++) msg->buffer[i] = 0;
+	//for (int i=0; i<BUFFER_LENGTH; i++) msg->buffer[i] = 0;
+	msg->msg_found = false;
 	msg->byte_index = 0;
 	msg->length = 0;
 	msg->msg_type = 0;
-	msg->msg_ready_to_send = 0;
+	msg->msg_ready_to_send = false;
  }
 
 /**
@@ -297,7 +305,7 @@ static int check_crc(struct msg_data_t * msg){
 	struct msg_data_t cp_msg = {
 		.length = 0,
 	};
-	for (int i = 0; i < msg->length-2; i++){
+	for (int i = 0; i < msg->length-CRC_LEN; i++){
 		cp_msg.buffer[i] = msg->buffer[i];
 		cp_msg.length = i;
 	}
@@ -307,7 +315,7 @@ static int check_crc(struct msg_data_t * msg){
 	if (msg->buffer[msg->length - 2] == cp_msg.buffer[cp_msg.length-2] &&
 		msg->buffer[msg->length-1] == cp_msg.buffer[cp_msg.length-1]){
 			return 1;
-		}
+	}
 	return 0;
 }
 
@@ -319,10 +327,10 @@ static int check_crc(struct msg_data_t * msg){
  static int construct_message(struct msg_data_t *msg)
  {
 	int nok = 0;
-	if (msg->chr == START_BYTE)
+	if (msg->chr == START_BYTE && !msg->msg_found)
 	{
-		msg->msg_found = true;
 		initialize_msg(msg);
+		msg->msg_found = true;
 	}
 	
 	if (msg->msg_found)
@@ -331,28 +339,24 @@ static int check_crc(struct msg_data_t * msg){
 		if (msg->byte_index == MSG_LEN_INDEX) { 
 			msg->length = (int)(msg->buffer[msg->byte_index])+CRC_LEN + MSG_HEADER_LEN;
 			if ((msg->length) >= BUFFER_LENGTH) {
-				//pr_info("MM5D91: UART Buffer size exceeded and message skipped");
 				initialize_msg(msg);
-				msg->msg_found = false;
 				return 0;
 			}
 		}
 		
 		if ((msg->length) == msg->byte_index+1 && msg->byte_index > 0)
 		{
-			if (!check_message_type(msg)){
+			if (!check_message_type(msg) || !check_message_len(msg)){
 				initialize_msg(msg);
-				msg->msg_found = false;
-			} 
-			msg->msg_ready_to_send = true;
+				return 0;
+			} else {
+				msg->msg_ready_to_send = true;
+			}
 		}
 
 		if (msg->msg_ready_to_send){
 			if (!check_crc(msg)) {
-				pr_info("MM5D91: CRC mismatch");
 				initialize_msg(msg);
-				msg->msg_found = false;
-				msg->msg_ready_to_send = false;
 				return 0;
 			}
 			kernel_buffer_len = msg->length;
@@ -360,8 +364,6 @@ static int check_crc(struct msg_data_t * msg){
 				kernel_buffer[i] = msg->buffer[i];
 			}
 			initialize_msg(msg);
-			msg->msg_found = false;
-			msg->msg_ready_to_send = false;
 			if (sig_tsk){
 				nok = send_sig(sig_tosend, sig_tsk, 0);
 				if (nok) {
@@ -384,8 +386,6 @@ static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *b
 	if (construct_message(&rx_message)){
 		return size;
 	} else {
-		// add correct error and error code here
-		// pr_info("MM5D91: Error happened in construct msg.");
 		return -EFAULT;
 	}
 }
@@ -447,7 +447,7 @@ static int __init mm5d91_uart_init(void) {
 	
 	int ret = alloc_chrdev_region(&devicenumber, base_minor, count, device_name);
 	if (!ret) {
-		pr_info("MM5D91: Device loaded\n");
+		pr_info("MM5D91: Driver loaded\n");
 		//printk("Major number received:%d\n", MAJOR(devicenumber));
 		mm5d91class = class_create("mm5d91");
 		mm5d91class->dev_uevent = mm5d91_uevent;
@@ -469,9 +469,7 @@ static int __init mm5d91_uart_init(void) {
 	if(ret) {
 		pr_info("MM5D91: Error! Could not load driver\n");
 		return -ret;
-	}
-	//printk("mm5d91 - Driver loaded %d\n", ret);
-		
+	}		
 	return 0;
 }
 
