@@ -461,7 +461,7 @@ static int __init mm5d91_uart_init(void) {
 	
 	int ret = alloc_chrdev_region(&devicenumber, base_minor, count, device_name);
 	if (!ret) {
-		pr_info("MM5D91: Device number registered\n");
+		pr_info("MM5D91: Device loaded\n");
 		//printk("Major number received:%d\n", MAJOR(devicenumber));
 		mm5d91class = class_create("mm5d91");
 		mm5d91class->dev_uevent = mm5d91_uevent;

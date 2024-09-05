@@ -6,8 +6,6 @@
 ![wiring](images/image.png)
 ## Install to kernel
 * sudo insmod mm5d91_driver.ko
-## Give permissions
-* sudo chmod 666 /dev/mm5d91
 ## Remove from kernel
 * sudo rmmod mm5d91_driver
 ## Compile
