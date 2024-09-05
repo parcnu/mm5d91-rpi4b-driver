@@ -13,7 +13,7 @@
 static unsigned int mm5d91_reserved = 0;
 static int sig_pid = 0;
 static struct task_struct *sig_tsk = NULL;
-static int sig_tosend = SIGKILL;
+static int sig_tosend = SIGUSR1;
 
 /******************** USER SIDE FUNCTIONS *******************/
 int base_minor = 0;
@@ -111,6 +111,8 @@ static int mm5d91_open(struct inode *inode, struct file *file)
 	//pr_info("%s\n", __func__);
 	if (!mm5d91_reserved){
 		mm5d91_reserved++;
+		sig_pid = task_pid_nr(current);
+		sig_tsk = pid_task(find_vpid(sig_pid), PIDTYPE_PID);
 	} else {
 		return -EBUSY;
 	}
@@ -123,7 +125,7 @@ static int mm5d91_release(struct inode *inode, struct file *file)
 	mm5d91_reserved = 0;
 	sig_pid = 0;
 	sig_tsk = NULL;
-	sig_tosend = SIGKILL;;
+	//sig_tosend = SIGKILL;;
     return 0;
 }
 
@@ -172,27 +174,11 @@ static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
  * Gets pid from user space process and saves it to global variable.
  */
 static ssize_t mm5d91_ioctl(struct file *file,  unsigned int cmd, unsigned long arg) {
-	int ok = 0;
-	struct pid_sig_t p_s; 
 	if (_IOC_TYPE(cmd) != IOCTL_NUMBER) return -ENOTTY;
 	if (_IOC_NR(cmd) > IOCTL_MAX_CMDS) return -ENOTTY;
 	
 	switch(cmd)
 	{
-		case IOCTL_SET_PID_SIG:
-			ok = access_ok((void __user *)arg, sizeof(struct pid_sig_t));
-			if (ok) {
-				if (copy_from_user(&p_s, (struct pid_sig_t*)arg, sizeof(struct pid_sig_t)))
-            	{
-                	return -EACCES;
-            	}
-				sig_pid = (int)p_s.pid;
-				sig_tosend = (int)p_s.sig;
-				sig_tsk = pid_task(find_vpid(sig_pid), PIDTYPE_PID);
-			} else {
-				return ok;
-			}
-			break;
 		case IOCTL_SEND_SIGNAL:	// to be used for future purposes
 			break;
 		case IOCTL_GET_MSG_LEN:
