@@ -4,6 +4,14 @@
 * add some checks to make more robust
 ## Wiring of RPI4B to mm5d91
 ![wiring](images/image.png)
+## Prerequisite
+* sudo cp mm5d91_overlay.dtbo /boot/overlays
+* sudo vi /boot/config.txt
+    * add "dtoverlay=mm5d91_overlay"
+* sudo raspi-config
+    * interfaces->serial->login shell to be accessible over serial -> NO
+    * interfaces->serial->Serial port hardware enabled -> YES
+    * reboot raspi
 ## Install to kernel
 * sudo insmod mm5d91_driver.ko
 ## Remove from kernel
