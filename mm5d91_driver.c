@@ -66,6 +66,7 @@ static struct crc_data_t crc16(struct msg_data_t *msg)
 	crc.crc_lo = 0xff;
 	crc.crc_hi = 0xff;
 	uint16_t _crc = 0xFFFF;
+	
 	for (int i = 0; i < msg->length; i++)
 	{
 		_crc = ((uint8_t)(_crc >> 8) | (_crc << 8)) ^ msg->buffer[i];
@@ -227,7 +228,7 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 /**
  * @brief Set RW permissions for created device
  */
-static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
+static int mm5d91_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
     add_uevent_var(env, "DEVMODE=%#o", 0666);
     return 0;
@@ -449,7 +450,7 @@ static int __init mm5d91_uart_init(void) {
 	if (!ret) {
 		pr_info("MM5D91: Driver loaded\n");
 		//printk("Major number received:%d\n", MAJOR(devicenumber));
-		mm5d91class = class_create("mm5d91");
+		mm5d91class = class_create(THIS_MODULE, "mm5d91");
 		mm5d91class->dev_uevent = mm5d91_uevent;
 		if (IS_ERR(mm5d91class))
                 return PTR_ERR(mm5d91class);
