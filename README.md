@@ -5,6 +5,7 @@
 ## Wiring of RPI4B to mm5d91
 ![wiring](images/image.png)
 ## Prerequisite
+* sudo apt install raspberrypi-kernel-headers
 * sudo cp mm5d91_overlay.dtbo /boot/overlays
 * sudo vi /boot/config.txt
     * add "dtoverlay=mm5d91_overlay"
