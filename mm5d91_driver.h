@@ -5,6 +5,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include "mm5d91_ioctl.h"
+#include <linux/version.h>
 
 #define DEG_BASE 0x10
 #define START_BYTE 0xd9
@@ -80,7 +81,11 @@ static ssize_t mm5d91_read(struct file *file, char __user *user_buffer,
 static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
                             size_t count, loff_t *offset);
 static ssize_t mm5d91_ioctl(struct file *file,  unsigned int cmd, unsigned long arg);
+#if ( LINUX_VERSION_CODE >= KERNEL_VERSION( 6, 4, 0 ) )	
+static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env);
+#else
 static int mm5d91_uevent(struct device *dev, struct kobj_uevent_env *env);
+#endif
 static int check_message_len(struct msg_data_t *msg);
 
 #endif //__MM5D91DRIVER_H
