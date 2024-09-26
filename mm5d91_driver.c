@@ -395,11 +395,8 @@ static int check_crc(struct msg_data_t * msg){
  */
 static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *buffer, size_t size) {
 	rx_message.chr = (unsigned char)buffer[0];
-	if (construct_message(&rx_message)){
-		return size;
-	} else {
-		return -EFAULT;
-	}
+	construct_message(&rx_message);
+	return size;
 }
 
 /**
