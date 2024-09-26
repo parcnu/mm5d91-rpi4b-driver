@@ -9,6 +9,7 @@
 #include <linux/sched/signal.h>
 #include "mm5d91_driver.h"
 #include "mm5d91_ioctl.h"
+#include <linux/version.h>
 
 static unsigned int mm5d91_reserved = 0;
 static int sig_pid = 0;
@@ -445,12 +446,17 @@ static void mm5d91_uart_remove(struct serdev_device *mm5d91) {
  * 		  registers serdev driver for mm5d91 communication
  */
 static int __init mm5d91_uart_init(void) {
-	
 	int ret = alloc_chrdev_region(&devicenumber, base_minor, count, device_name);
 	if (!ret) {
 		pr_info("MM5D91: Driver loaded\n");
 		//printk("Major number received:%d\n", MAJOR(devicenumber));
-		mm5d91class = class_create(THIS_MODULE, "mm5d91");
+// check kernal version and use class_create accordingly
+#if ( LINUX_VERSION_CODE >= KERNEL_VERSION( 6, 4, 0 ) )	
+  mm5d91class = class_create("mm5d91");
+#else
+  mm5d91class = class_create(THIS_MODULE, "mm5d91");
+#endif
+		
 		mm5d91class->dev_uevent = mm5d91_uevent;
 		if (IS_ERR(mm5d91class))
                 return PTR_ERR(mm5d91class);
