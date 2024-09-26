@@ -229,11 +229,21 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 /**
  * @brief Set RW permissions for created device
  */
+// check kernel version and use mm5d91_uevent accordingly
+#if ( LINUX_VERSION_CODE >= KERNEL_VERSION( 6, 4, 0 ) )	
 static int mm5d91_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
     add_uevent_var(env, "DEVMODE=%#o", 0666);
     return 0;
 }
+#else
+static int mm5d91_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+    add_uevent_var(env, "DEVMODE=%#o", 0666);
+    return 0;
+}
+#endif
+
 
 /**
  * @brief Check message len
