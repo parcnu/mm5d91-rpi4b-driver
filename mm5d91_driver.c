@@ -9,6 +9,7 @@
 #include <linux/sched/signal.h>
 #include "mm5d91_driver.h"
 #include "mm5d91_ioctl.h"
+#include <linux/version.h>
 
 static unsigned int mm5d91_reserved = 0;
 static int sig_pid = 0;
@@ -66,6 +67,7 @@ static struct crc_data_t crc16(struct msg_data_t *msg)
 	crc.crc_lo = 0xff;
 	crc.crc_hi = 0xff;
 	uint16_t _crc = 0xFFFF;
+	
 	for (int i = 0; i < msg->length; i++)
 	{
 		_crc = ((uint8_t)(_crc >> 8) | (_crc << 8)) ^ msg->buffer[i];
@@ -227,7 +229,7 @@ MODULE_DEVICE_TABLE(of, mm5d91_uart_ids);
 /**
  * @brief Set RW permissions for created device
  */
-static int mm5d91_uevent(const struct device *dev, struct kobj_uevent_env *env)
+static int mm5d91_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
     add_uevent_var(env, "DEVMODE=%#o", 0666);
     return 0;
@@ -444,12 +446,17 @@ static void mm5d91_uart_remove(struct serdev_device *mm5d91) {
  * 		  registers serdev driver for mm5d91 communication
  */
 static int __init mm5d91_uart_init(void) {
-	
 	int ret = alloc_chrdev_region(&devicenumber, base_minor, count, device_name);
 	if (!ret) {
 		pr_info("MM5D91: Driver loaded\n");
 		//printk("Major number received:%d\n", MAJOR(devicenumber));
-		mm5d91class = class_create("mm5d91");
+// check kernal version and use class_create accordingly
+#if ( LINUX_VERSION_CODE >= KERNEL_VERSION( 6, 4, 0 ) )	
+  mm5d91class = class_create("mm5d91");
+#else
+  mm5d91class = class_create(THIS_MODULE, "mm5d91");
+#endif
+		
 		mm5d91class->dev_uevent = mm5d91_uevent;
 		if (IS_ERR(mm5d91class))
                 return PTR_ERR(mm5d91class);
