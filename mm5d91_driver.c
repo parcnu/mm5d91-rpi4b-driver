@@ -162,7 +162,7 @@ static ssize_t mm5d91_write(struct file *file, const char __user *user_buffer,
 	int nbr = copy_from_user(buf, user_buffer, count);
 	construct_uart_tx_message(buf, &tx_message, count);
 	if (nbr){
-		pr_info("MM5D91: ISSUE in copying from user");
+		pr_info("MM5D91: ISSUE in copying from user\n");
 		return -EFAULT;
 	}
 	*offset += count;
@@ -381,7 +381,7 @@ static int check_crc(struct msg_data_t * msg){
 			if (sig_tsk){
 				nok = send_sig(sig_tosend, sig_tsk, 0);
 				if (nok) {
-					pr_info("MM5D91: error sending signal to USER PID %d", sig_tosend);
+					pr_info("MM5D91: error sending signal to USER PID %d\n", sig_tosend);
 					return nok;
 				}
 			}
@@ -410,7 +410,7 @@ static int mm5d91_uart_wrt(struct msg_data_t * msg) {
 	ret = -1;
 
 	if (!msg->uart_device){
-		pr_info("MM5D91: serdev_device = NULL");
+		pr_info("MM5D91: serdev_device = NULL\n");
 		return -EFAULT;
 	}
 	
@@ -496,7 +496,7 @@ static int __init mm5d91_uart_init(void) {
 * Function to be called when driver is removed from kernel.
 */
 static void __exit mm5d91_uart_exit(void) {
-	pr_info("MM5D91: Driver removed");
+	pr_info("MM5D91: Driver removed\n");
 	device_destroy(mm5d91class, devicenumber);
     class_destroy(mm5d91class);
 	cdev_del(&mm5d91dev);
