@@ -1,6 +1,6 @@
 # MM5D91 driver for RPI4.
 * Still under construction. 
-* is run on raspian bullseye. If bookworm in use then compiler flag BW to be used.
+* is tested on bullseye and bookworm. 
 ## Wiring of RPI4B to mm5d91
 ![wiring](images/image.png)
 ## Prerequisite
