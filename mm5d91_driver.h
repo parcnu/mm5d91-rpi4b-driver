@@ -61,7 +61,6 @@ struct crc_data_t{
     unsigned char crc_hi;
 };
 
-int buff[128];
 static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *buffer, size_t size);
 static int mm5d91_uart_probe(struct serdev_device *mm5d91);
 static void mm5d91_uart_remove(struct serdev_device *mm5d91);

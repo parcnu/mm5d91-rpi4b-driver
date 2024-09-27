@@ -17,10 +17,10 @@ static struct task_struct *sig_tsk = NULL;
 static int sig_tosend = SIGUSR1;
 
 /******************** USER SIDE FUNCTIONS *******************/
-int base_minor = 0;
-char *device_name = "mm5d91";
-int count = 1;
-dev_t devicenumber;
+static int base_minor = 0;
+static char *device_name = "mm5d91";
+static int count = 1;
+static dev_t devicenumber;
 
 module_param(base_minor, int, 0);
 module_param(count, int, 0);
@@ -64,9 +64,11 @@ static struct crc_data_t crc16(struct msg_data_t *msg)
 {
 	
 	struct crc_data_t crc;
+	uint16_t _crc;
 	crc.crc_lo = 0xff;
 	crc.crc_hi = 0xff;
-	uint16_t _crc = 0xFFFF;
+
+	_crc = 0xFFFF;
 	
 	for (int i = 0; i < msg->length; i++)
 	{
@@ -192,7 +194,7 @@ static ssize_t mm5d91_ioctl(struct file *file,  unsigned int cmd, unsigned long 
 	return 0;
 }
 
-struct file_operations mm5d91_fops = {
+static struct file_operations mm5d91_fops = {
 	.read = mm5d91_read,
 	.write = mm5d91_write,
 	.open = mm5d91_open,
@@ -404,12 +406,15 @@ static int mm5d91_uart_recv(struct serdev_device *mm5d91, const unsigned char *b
  *        
  */
 static int mm5d91_uart_wrt(struct msg_data_t * msg) {
+	int ret;
+	ret = -1;
+
 	if (!msg->uart_device){
 		pr_info("MM5D91: serdev_device = NULL");
 		return -EFAULT;
 	}
 	
-	int ret = serdev_device_write(msg->uart_device, msg->buffer, (size_t)msg->length+CRC_LEN, 0);
+	ret = serdev_device_write(msg->uart_device, msg->buffer, (size_t)msg->length+CRC_LEN, 0);
 	if (ret < 0 || ret < count)
 		return ret;
 	serdev_device_wait_until_sent(msg->uart_device, 0);
