@@ -1,0 +1,12 @@
+CFLAGS = -Wall
+
+TARGET = usertestapp
+
+all: $(TARGET)
+
+$(TARGET) : $(TARGET).c
+	${CC} $(CFLAGS) ${LDFLAGS} -o $(TARGET) $(TARGET).c
+
+clean:
+	rm -f $(TARGET)
+	

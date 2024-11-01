@@ -5,6 +5,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdint.h>
 #include "mm5d91_ioctl.h"
 
 unsigned int userbuffer[BUFFER_LENGTH];

@@ -118,7 +118,8 @@ static int mm5d91_open(struct inode *inode, struct file *file)
 		sig_pid = task_pid_nr(current);
 		sig_tsk = pid_task(find_vpid(sig_pid), PIDTYPE_PID);
 	} else {
-		return -EBUSY;
+		//return -EBUSY; // will lock if userapp is killed so that it is not running release func.
+		mm5d91_reserved = 0;
 	}
 	return 0;
 }
