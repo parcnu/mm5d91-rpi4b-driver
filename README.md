@@ -71,7 +71,7 @@ kill -SIGTERM <pid>
 * move to your selected <path> where driver is planned to downloaded.
 * git clone https://github.com/parcnu/mm5d91-rpi4b-driver.git
 * cd <your yocto source path>
-* follow the Yocto build instruction given <here>
+* follow the Yocto build instruction given in https://github.com/parcnu/mm5d91-yocto-main/tree/scarthgap
 # TODO
 * missing unit tests
 * add some checks to make more robust (i.e. GOTOs)
